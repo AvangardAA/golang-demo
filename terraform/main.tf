@@ -63,16 +63,34 @@ resource "aws_security_group" "terraform_sg" {
   }
 }
 
+resource "aws_key_pair" "terraform_test_key" {
+  key_name   = "terraform-hw-key"
+  # public_key = 
+}
+
 resource "aws_instance" "terraform_hw" {
+  count         = 2
   ami           = "ami-0084a47cc718c111a"
   instance_type = "t3.micro"
-  # key_name      = "terraform-instance-test"
+  key_name      = aws_key_pair.terraform_test_key.key_name
   subnet_id     = element(aws_subnet.terraform_subnet[*].id, 0)
   security_groups = [aws_security_group.terraform_sg.id]
 
   tags = {
     Name = "TerraformHW"
   }
+
+  user_data = <<-EOF
+              #!/bin/bash
+              sudo apt install nginx -y
+              sudo systemctl start nginx
+              sudo systemctl enable nginx
+              git clone https://github.com/AvangardAA/golang-demo.git
+              wget -P /home/ubuntu/ https://go.dev/dl/go1.23.2.linux-amd64.tar.gz
+              sudo tar -C /usr/local -xzf /home/ubuntu/go1.23.2.linux-amd64.tar.gz
+              export PATH=$PATH:/usr/local/go/bin
+              GOOS=linux GOARCH=amd64 go build -o /home/ubuntu/golang-demo/golang-demo
+              EOF
 }
 
 resource "aws_security_group" "rds_sg" {
@@ -127,4 +145,57 @@ resource "aws_db_instance" "postgres" {
   vpc_security_group_ids = [aws_security_group.rds_sg.id]
   
   parameter_group_name = aws_db_parameter_group.pg_terraform.name
+}
+
+resource "aws_lb" "nginx_alb" {
+  name               = "nginx-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.terraform_sg.id]
+  subnets            = aws_subnet.terraform_subnet[*].id
+
+  enable_deletion_protection = false
+
+  tags = {
+    Name = "nginx alb"
+  }
+}
+
+resource "aws_lb_target_group" "nginx_tg" {
+  name     = "nginx-tg-hw"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.terraform_extra_2.id
+
+  health_check {
+    healthy_threshold   = 2
+    interval            = 30
+    path                = "/"
+    port                = "80"
+    protocol            = "HTTP"
+    timeout             = 5
+    unhealthy_threshold = 2
+  }
+
+  tags = {
+    Name = "nginx terraform hw"
+  }
+}
+
+resource "aws_lb_target_group_attachment" "nginx_tg_atchm_hw" {
+  count             = 2
+  target_group_arn  = aws_lb_target_group.nginx_tg.arn
+  target_id         = aws_instance.terraform_hw[count.index].id
+  port              = 80
+}
+
+resource "aws_lb_listener" "nginx_listen_hw" {
+  load_balancer_arn = aws_lb.nginx_alb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type = "forward"
+    target_group_arn = aws_lb_target_group.nginx_tg.arn
+  }
 }
