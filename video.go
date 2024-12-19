@@ -91,6 +91,8 @@ func videosGetHandler(ctx *gin.Context) {
 			return
 		}
 	}
+	dummyVideo := Video{ID: "0", Title: "Dummy Video"}
+	videos = append(videos, dummyVideo)
 	ctx.JSON(http.StatusOK, videos)
 }
 

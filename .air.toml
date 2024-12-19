@@ -1,0 +1,10 @@
+root = "."
+
+[build]
+  cmd = "GOOS=linux GOARCH=amd64 go build -o golang-demo ."
+  exclude_dir = ["terraform", "vendor", "tmp"]
+  bin = "./golang-demo"
+  rerun = true
+  poll = true
+  poll_interval = 500
+  follow_symlink = true
